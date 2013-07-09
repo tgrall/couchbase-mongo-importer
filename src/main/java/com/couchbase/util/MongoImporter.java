@@ -31,7 +31,7 @@ public class MongoImporter {
     private final static String CMD_CB_BUCKET = "b";
     private final static String CMD_CB_PASSWORD = "cp";
 
-    private final static String CMD_MONGO_HOST = "h";
+    private final static String CMD_MONGO_HOST = "mh";
     private final static String CMD_MONGO_PORT = "p";
     private final static String CMD_MONGO_DB = "db";
     private final static String CMD_MONGO_USER = "mu";
@@ -83,6 +83,7 @@ public class MongoImporter {
      * @throws Exception
      */
     public static void main(final String[] args) {
+
 
         MongoImporter importer = new MongoImporter();
         try {
@@ -226,6 +227,9 @@ public class MongoImporter {
         DBCollection dbCollection = getMongoDB().getCollection(collection);
         DBCursor cursor = dbCollection.find();
         try {
+
+            CouchbaseClient client = getCouchbaseClient();
+
             while (cursor.hasNext()) {
                 DBObject object = cursor.next();
                 String id = object.get("_id").toString();
@@ -244,7 +248,27 @@ public class MongoImporter {
                     writer.write(json);
                     writer.close();
                 } else {
-                    getCouchbaseClient().set(id, json).get();
+
+                    try {
+                        client.set(id, json).get();
+                    } catch (Exception e) {
+
+                        File errorFile = new File("error-"+ collection +"-"+ System.currentTimeMillis() +".txt");
+                        if(!errorFile.exists()) {
+                            errorFile.createNewFile();
+                        }
+                        FileWriter fw = new FileWriter(errorFile.getAbsoluteFile());
+                        System.out.println( "Error File Created "+ errorFile.getAbsolutePath() );
+                        PrintWriter out = new PrintWriter( new BufferedWriter(fw));
+                        out.println("Error "+ e.getMessage());
+                        out.println("-------------------------------------------------------\n\n");
+                        out.println("oid: "+ object.get("_id").toString() );
+                        out.println("-------------------------------------------------------\n\n");
+                        out.println("couchbase key: "+ id );
+                        out.println("-------------------------------------------------------\n\n");
+                        out.println("JSON: \n"+  json  );
+                        out.close();
+                    }
                 }
             }
         } finally {
@@ -256,8 +280,8 @@ public class MongoImporter {
     public static CouchbaseClient getCouchbaseClient() throws Exception {
         if (couchbaseClient == null) {
             try {
-            uris.add(new URI(clusterURI));
-            couchbaseClient = new CouchbaseClient(uris, bucket, password);
+                uris.add(new URI(clusterURI));
+                couchbaseClient = new CouchbaseClient(uris, bucket, password);
             } catch (Exception e) {
                 throw new Exception("Unable to connect to couchbase: \n\t"+ e.getMessage());
             }
@@ -268,7 +292,7 @@ public class MongoImporter {
 
     public static MongoClient getMongoClient() throws UnknownHostException {
         if (mongo == null) {
-            mongo = new MongoClient("localhost", 27017);
+            mongo = new MongoClient(mongoHost, Integer.parseInt(mongoPort) );
         }
         return mongo;
     }
